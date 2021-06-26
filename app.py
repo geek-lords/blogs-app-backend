@@ -142,7 +142,9 @@ def fetch_blog(blog_id):
                         "from blog join Users "
                         "on blog.user_id = Users.id where blog.id = %s", blog_id)
             blog = cur.fetchone()
-            cur.execute("select Users.first_name, Users.last_name, comments.comment from Users join comments on Users.id = comments.user_id where comments.blog_id = %s",blog_id)
+            cur.execute(
+                "select Users.first_name, Users.last_name, comments.comment from Users join comments on Users.id = comments.user_id where comments.blog_id = %s",
+                blog_id)
             comments = cur.fetchall()
             return {"blog": blog, "comments": comments}
     except KeyError:
@@ -189,6 +191,31 @@ def comment(blog_id):
                         (blog_id, user_id, comment))
             conn.commit()
             return {"success": "Comment Successfully added"}, 200
+    except KeyError:
+        print("Important Data not found - Key Error")
+        return {"error": "Important Data not found"}, error_code
+
+
+@app.route("/delete/<blog_id>", methods=["POST"])
+def delete(blog_id):
+    try:
+        if not request.json:
+            return {"error": "JSON Data not found"}
+        user_id = str(request.json['user_id']).strip()
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("select id from Users where id = %s", user_id)
+            if cur.rowcount == 0:
+                return {"error": "Invalid User"}, error_code
+            cur.execute("select id, user_id from blog where id = %s", blog_id)
+            if cur.rowcount == 0:
+                return {"error": "Unknown Blog"}, error_code
+            if cur.fetchone()['user_id'] != user_id:
+                return {"error": "You don't have permissions to delete this blog"}, error_code
+            cur.execute("delete from blog where id = %s", blog_id)
+            conn.commit()
+            cur.execute("delete from comments where blog_id = %s", blog_id)
+            conn.commit()
+        return {"success": "Successfully Deleted all records regarded to this blog."}, 200
     except KeyError:
         print("Important Data not found - Key Error")
         return {"error": "Important Data not found"}, error_code
