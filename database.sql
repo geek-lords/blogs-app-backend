@@ -13,3 +13,9 @@ create table blog(
     content text not null,
     like_count text default 0
 );
+
+create table comments (
+    blog_id varchar(36) not null,
+    user_id varchar(36) not null,
+    comment text not null
+);

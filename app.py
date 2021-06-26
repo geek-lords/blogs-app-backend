@@ -76,5 +76,123 @@ def authenticate_user():
         return {"error": "Important Data not found"}, error_code
 
 
+@app.route("/create_blog", methods=["POST"])
+def create_blog():
+    if not request.json:
+        return {"error", "JSON Data not found"}, error_code
+    try:
+        user_id = str(request.json["user_id"]).strip()
+        title = str(request.json["title"]).strip()
+        content = str(request.json["content"]).strip()
+
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("select id from Users where id = %s ", user_id)
+            if cur.rowcount == 0:
+                return {"error": "User doesn't exists."}, error_code
+            blog_id = str(uuid4())
+            cur.execute("insert into blog(id, user_id, title, content) values(%s, %s, %s, %s)",
+                        (blog_id, user_id, title, content))
+            conn.commit()
+            return {"blog_id": blog_id}
+    except KeyError:
+        print("Important Data not found - Key Error")
+        return {"error": "Important Data not found"}, error_code
+    except pymysql.err.IntegrityError:
+        print("User Information already exists")
+        return {"error": "User Information already exists"}, error_code
+
+
+@app.route("/fetch_blogs", methods=["GET"])
+def fetch_blogs():
+    try:
+        if not request.json:
+            return {"error": "JSON Data not found"}
+
+        user_id = str(request.json['user_id']).strip()
+
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("Select id from Users where id = %s", user_id)
+            if cur.rowcount == 0:
+                return {"error": "Invalid User."}, error_code
+            cur.execute(
+                "select blog.id, blog.title, blog.content, blog.like_count, "
+                "Users.first_name, Users.last_name, Users.email_address "
+                "from blog join Users "
+                "on blog.user_id = Users.id "
+                "where blog.user_id <> %s",
+                user_id)
+            return {"list_blogs": cur.fetchall()}, 200
+    except KeyError:
+        print("Important Data not found - Key Error")
+        return {"error": "Important Data not found"}, error_code
+
+
+@app.route("/fetch_blogs/<blog_id>", methods=["GET"])
+def fetch_blog(blog_id):
+    if not request.json:
+        return {"error": "JSON Data not found"}
+    try:
+        user_id = str(request.json['user_id']).strip()
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("select id from Users where id = %s", user_id)
+            if cur.rowcount == 0:
+                return {"error": "Invalid user"}, error_code
+            cur.execute("select blog.id, blog.title, blog.content, blog.like_count, "
+                        "Users.first_name, Users.last_name, Users.email_address "
+                        "from blog join Users "
+                        "on blog.user_id = Users.id where blog.id = %s", blog_id)
+            blog = cur.fetchone()
+            cur.execute("select Users.first_name, Users.last_name, comments.comment from Users join comments on Users.id = comments.user_id where comments.blog_id = %s",blog_id)
+            comments = cur.fetchall()
+            return {"blog": blog, "comments": comments}
+    except KeyError:
+        print("Important Data not found - Key Error")
+        return {"error": "Important Data not found"}, error_code
+
+
+@app.route("/like/<blog_id>", methods=["POST"])
+def like(blog_id):
+    if not request.json:
+        return {"error": "User must be Logged In to like a Blog."}, error_code
+    try:
+        user_id = str(request.json["user_id"]).strip()
+        ld = str(request.json["like_dislike"]).strip()
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("select id from Users where id = %s", user_id)
+            if cur.rowcount == 0:
+                return {"error": "Invalid User"}, error_code
+            cur.execute("Select user_id, like_count from blog where id = %s", blog_id)
+            row = cur.fetchone()
+            if row['user_id'] == user_id:
+                return {"error": "You can't like your own blogs."}, error_code
+            new_like = int(row['like_count']) + int(ld)
+            cur.execute("update blog set like_count = %s where id = %s ", (new_like, blog_id))
+            conn.commit()
+        return {"success": "Blog liked Successfully."}, 200
+    except KeyError:
+        print("Important Data not found - Key Error")
+        return {"error": "Important Data not found"}, error_code
+
+
+@app.route("/comment/<blog_id>", methods=["POST"])
+def comment(blog_id):
+    try:
+        if not request.json:
+            return {"error": "JSON Data not found"}, error_code
+        user_id = str(request.json['user_id']).strip()
+        comment = str(request.json['comment']).strip()
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("select id from Users where id = %s", user_id)
+            if cur.rowcount == 0:
+                return {"error": "Invalid User"}, error_code
+            cur.execute("insert into comments(blog_id, user_id, comment) values(%s,%s,%s) ",
+                        (blog_id, user_id, comment))
+            conn.commit()
+            return {"success": "Comment Successfully added"}, 200
+    except KeyError:
+        print("Important Data not found - Key Error")
+        return {"error": "Important Data not found"}, error_code
+
+
 if __name__ == "__main__":
     app.run(debug=True)
