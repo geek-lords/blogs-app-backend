@@ -2,14 +2,14 @@ from flask import Flask, request
 from uuid import uuid4
 from email_validator import validate_email, EmailNotValidError
 import pymysql
-from flask_cors import CORS
+# from flask_cors import CORS
 from db_utilities import connection
 
 error_code = 400
 password_min = 6
 password_max = 40
 app = Flask(__name__)
-CORS(app)
+# CORS(app)
 
 
 @app.route("/create_account", methods=["POST"])
@@ -201,7 +201,7 @@ def comment(blog_id):
 def delete(blog_id):
     try:
         if not request.json:
-            return {"error": "JSON Data not found"}
+            return {"error": "JSON Data not found"}, error_code
         user_id = str(request.json['user_id']).strip()
         with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
             cur.execute("select id from Users where id = %s", user_id)
@@ -220,6 +220,41 @@ def delete(blog_id):
     except KeyError:
         print("Important Data not found - Key Error")
         return {"error": "Important Data not found"}, error_code
+
+
+@app.route("/profile", methods=['POST'])
+def profile():
+    try:
+        if not request.json:
+            return {"error": "JSON Data not found"}
+        user_id = str(request.json['user_id'].strip())
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("Select first_name, last_name, email_address from Users where id = %s", user_id)
+            if cur.rowcount < 1:
+                return {"error": "User doesn't exists"}, error_code
+
+        return {"profile": cur.fetchone()}
+
+    except KeyError:
+        return {"error": "Username not found."}, error_code
+
+
+@app.route("/fetch_blogs/user", methods=['POST'])
+def fetch_user_blogs():
+    try:
+        if not request.json:
+            return {"error": "JSON Data not found"}
+        user_id = str(request.json['user_id'].strip())
+        with connection() as conn, conn.cursor(pymysql.cursors.DictCursor) as cur:
+            cur.execute("Select id, title, content, like_count from blog where user_id = %s", user_id)
+            if cur.rowcount < 1:
+                return {"error": "No Blogs Found."}, error_code
+
+        return {"user_blogs": cur.fetchall()}
+
+    except KeyError:
+        return {"error": "Username not found."}, error_code
+
 
 
 if __name__ == "__main__":
